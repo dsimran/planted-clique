@@ -1,0 +1,199 @@
+import networkx
+import networkx as nx
+import numpy as np
+from numpy import linalg as LA
+from numpy.linalg import matrix_power
+import sys
+import matplotlib.pyplot as plt
+import math
+import random
+
+np.set_printoptions(threshold=sys.maxsize)
+
+# number of nodes in random graph
+n = 70
+
+# number of nodes in complete graph
+k = 10
+
+# total number of nodes in combined graph
+N = n + k
+
+# probably of edge connection between random nodes
+pr = 0.2
+
+# probability of edge between random graph and clique
+pc = 0.05
+
+print("Random graph size = ", n)
+print("Clique size = ", k)
+print("Probability of random to random edge connection = ", pr)
+print("Probability of random to clique edge connection = ", pc)
+print("Number of red edges per red node = ", k - 1)
+# print("Expected number of yellow edges per blue node = ",p*k)
+# print("Expected number of blue edges per blue node= ",p*(n-1))
+# print("Expected degree of red node= ",(k-1)+(p*n))
+# print("Expected degree of blue node= ",p*(n-1)+(p*k))
+
+G = nx.Graph()
+node_colors = []
+
+#combined graph
+combined_Graph = nx.erdos_renyi_graph(n+k, pr, seed=None, directed=False)
+pos=networkx.circular_layout(combined_Graph)
+plt.figure(6)
+nx.draw(combined_Graph, pos, with_labels=True, node_size=100, node_color="skyblue", font_size=8, font_color="black", font_weight="bold", edge_color="gray", linewidths=0.5)
+
+# set the coords of the k clique nodes
+for i in range(0, k):
+    theta = (2 * i * math.pi) / k
+    #    print(i, theta)
+    a = 5
+    b = 0
+    r = 1
+    xi = a + r * math.cos(theta)
+    yi = b + r * math.sin(theta)
+    G.add_node(i, pos=(xi, yi))
+    node_colors.append('red')
+
+# set the coords of the random nodes
+theta = 0
+delta_theta = (2 * math.pi) / n
+for i in range(k, k + n):
+    #    print(i, theta)
+    a = 0
+    b = 0
+    r = 2
+    xi = a + r * math.cos(theta)
+    yi = b + r * math.sin(theta)
+    G.add_node(i, pos=(xi, yi))
+    node_colors.append('blue')
+    theta = theta + delta_theta
+
+# adjacency matrix
+A = np.zeros((k + n, k + n))
+
+
+# set all random edges first
+random.seed(9001)
+for i in range(0, k + n):
+    # no self loops allowed???
+    A[i][i] = 0
+    for j in range(i + 1, k + n):
+        randomnum = random.uniform(0, 1)
+        # connect random node to random node with probability pr
+        if (i >= k) & (j >= k):
+            if randomnum < pr:
+                A[i][j] = 1
+                A[j][i] = 1
+                G.add_edge(i, j, color='b')
+        # connect clique node to random node with probability pc
+        if (i < k) & (j >= k):
+            if randomnum < pc:
+                A[i][j] = 1
+                A[j][i] = 1
+                G.add_edge(i, j, color='y')
+
+# set edges in the clique
+for i in range(0, k):
+    for j in range(i + 1, k):
+        A[i][j] = 1
+        A[j][i] = 1
+        # no self loops allowed
+        # print(i,j,"clique red edge")
+        G.add_edge(i, j, color='r')
+
+# for e in G.edges:
+#    print(e)
+
+
+# print(A)
+# plot the adjacency matrix A
+plt.figure(1)
+plt.imshow(A)
+plt.colorbar()
+plt.title("Adjacency Matrix A")
+
+# plot the graph G
+
+plt.figure(2)
+pos = nx.get_node_attributes(G, 'pos')
+
+edge_colors = nx.get_edge_attributes(G, 'color').values()
+nx.draw(G, pos, node_color=node_colors, edge_color=edge_colors, width=0.25, with_labels=True)
+
+
+
+# plot the degree distribution
+plt.figure(3)
+degree_sequence = list(G.degree())
+print("degree sequence :", degree_sequence)
+deg = []
+for i in range(0, n + k):
+    deg.append(G.degree(i))
+
+print("Degree array = ")
+print(deg)
+
+# separate the coords into 2 arrays for plotting
+node, degree = zip(*degree_sequence)
+
+# color change
+colors = ["red" if i < k else "blue" for i in node]
+
+# plot the degree distribution
+plt.bar(node, degree, color=colors)
+plt.xticks(node)
+plt.yticks(degree)
+plt.title("Degree Distribution")
+plt.ylabel("degree")
+plt.xlabel("node")
+
+# number of edges in the whole graph
+m = np.sum(deg) / 2
+print("Edges = ", m)
+
+# expected adjacency matrix
+P = np.zeros((k + n, k + n))
+for i in range(0, n + k):
+    # no self loops
+    P[i][i] = 0
+    for j in range(i + 1, n + k):
+        P[i][j] = deg[i] * deg[j] / (2 * m)
+        P[j][i] = deg[i] * deg[j] / (2 * m)
+
+plt.figure(4)
+plt.imshow(P)
+plt.colorbar()
+plt.title("Expected Adjacency Matrix P")
+
+l = 3
+Al = matrix_power(A, l)
+Pl = matrix_power(P, l)
+# calculate modularity matrix B
+Bl = np.subtract(Al, Pl)
+# print(B)
+
+eigenValues, eigenVectors = LA.eigh(Bl)
+idx = eigenValues.argsort()[::-1]
+evals = eigenValues[idx]
+evecs = eigenVectors[:, idx]
+
+print("Eigenvalues:")
+print(evals)
+print("Largest eigenvector (column 0):")
+v = evecs[:, 0]
+print(v)
+
+# plot the graph but color the nodes according to which commmunity they belong
+community_colors = []
+for i in range(0, k + n):
+    if v[i] > 0:
+        community_colors.append('green')
+    else:
+        community_colors.append('orange')
+
+plt.figure(5)
+nx.draw(G, pos, node_color=community_colors, edge_color=edge_colors, width=0.25, with_labels=True)
+
+plt.show()
